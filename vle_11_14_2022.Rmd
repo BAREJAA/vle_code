@@ -1,0 +1,356 @@
+---
+title: "Linear Models for Differential Abundance Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# install.packages("tidyverse")
+library(tidyverse)
+
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# 
+# BiocManager::install("limma")
+library(limma)
+```
+
+## Guides
+
+limma guide (specifically chapters 8, 9, and 13) - https://www.bioconductor.org/packages/devel/bioc/vignettes/limma/inst/doc/usersguide.pdf
+
+A guide to creating design matrices for gene expression experiments - https://f1000research.com/articles/9-1444/v1
+
+Common statistical tests are linear models (or: how to teach stats) - https://lindeloev.github.io/tests-as-linear/#5_two_means
+
+## Create synthetic data sets and pheno tables
+```{r}
+# Data for example 1
+matrix_one <- tibble::tibble(
+  gene_name = paste0("Gene_", letters[1:10]),
+  mouse_1 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_2 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_3 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_4 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_5 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_6 = rnorm(n = 10, mean = 1, sd = 0.1)
+)
+
+matrix_a_b <- matrix_one %>% 
+                dplyr::filter(gene_name %in% c("Gene_a", "Gene_b")) %>% 
+                dplyr::mutate(across(c(mouse_4, mouse_5, mouse_6),
+                                     ~. + 1))
+matrix_one <- dplyr::bind_rows(matrix_a_b, matrix_one[3:10, ])
+matrix_one_rownames <- matrix_one$gene_name
+matrix_one <- matrix_one %>% 
+                dplyr::select(-gene_name) %>% 
+                as.matrix()
+rownames(matrix_one) <- matrix_one_rownames
+
+pheno_one <- tibble::tibble(
+  treatment = c("control", "control", "control", "treatment", "treatment", "treatment")
+) %>% 
+  dplyr::mutate(treatment  = factor(treatment, 
+                                    levels = c("control", "treatment")))
+rownames(pheno_one) <- colnames(matrix_one)
+rm(matrix_a_b, matrix_one_rownames)
+
+# Data for example 2
+matrix_two <- tibble::tibble(
+  gene_name = paste0("Gene_", letters[1:10]),
+  mouse_1 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_2 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_3 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_4 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_5 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_6 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_7 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_8 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_9 = rnorm(n = 10, mean = 1, sd = 0.1)
+)
+
+matrix_a_b <- matrix_two %>% 
+                dplyr::filter(gene_name %in% c("Gene_a", "Gene_b")) %>% 
+                dplyr::mutate(across(c(mouse_4, mouse_5, mouse_6),
+                                     ~. + 1))
+matrix_c_d <- matrix_two %>% 
+                dplyr::filter(gene_name %in% c("Gene_c", "Gene_d")) %>% 
+                dplyr::mutate(across(c(mouse_7, mouse_8, mouse_9),
+                                     ~. + 1))
+matrix_two <- dplyr::bind_rows(matrix_a_b, matrix_c_d, matrix_two[5:10, ])
+matrix_two_rownames <- matrix_two$gene_name
+matrix_two <- matrix_two %>% 
+                dplyr::select(-gene_name) %>% 
+                as.matrix()
+rownames(matrix_two) <- matrix_two_rownames
+
+pheno_two <- tibble::tibble(
+  treatment = c("control", "control", "control", "trt1", "trt1", "trt1","trt2", "trt2", "trt2")
+) %>% 
+  dplyr::mutate(treatment  = factor(treatment, 
+                                    levels = c("control", "trt1", "trt2")))
+rownames(pheno_two) <- colnames(matrix_two)
+rm(matrix_a_b, matrix_c_d, matrix_two_rownames)
+
+# Data for example 3
+matrix_three <- tibble::tibble(
+  gene_name = paste0("Gene_", letters[1:10]),
+  mouse_1 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_2 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_3 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_4 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_5 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_6 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_7 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_8 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_9 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_10 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_11 = rnorm(n = 10, mean = 1, sd = 0.1),
+  mouse_12 = rnorm(n = 10, mean = 1, sd = 0.1)
+)
+
+# add a little "KO effect"
+matrix_three <- matrix_three %>% 
+                  dplyr::mutate(across(c("mouse_7", "mouse_8", "mouse_9", "mouse_10",
+                                         "mouse_11", "mouse_12"), 
+                                       ~. + 0.2))
+matrix_a <- matrix_three %>% 
+                dplyr::filter(gene_name %in% c("Gene_a")) %>% 
+                dplyr::mutate(across(c(mouse_4, mouse_5, mouse_6),
+                                     ~. + 1)) %>% 
+                dplyr::mutate(across(c(mouse_10, mouse_11, mouse_12),
+                                     ~. + 2)) 
+
+matrix_b <- matrix_three %>% 
+                dplyr::filter(gene_name %in% c("Gene_b")) %>% 
+                dplyr::mutate(across(c(mouse_4, mouse_5, mouse_6),
+                                     ~. + 1)) %>% 
+                dplyr::mutate(across(c(mouse_10, mouse_11, mouse_12),
+                                     ~. + 1)) 
+
+matrix_three <- dplyr::bind_rows(matrix_a, matrix_b, matrix_three[3:10, ])
+matrix_three_rownames <- matrix_three$gene_name
+matrix_three <- matrix_three %>% 
+                dplyr::select(-gene_name) %>% 
+                as.matrix()
+rownames(matrix_three) <- matrix_three_rownames
+
+pheno_three <- tibble::tibble(
+  treatment = c("control", "control", "control", "treatment", "treatment", "treatment", "control", "control", "control", "treatment", "treatment", "treatment"),
+  genotype = c(rep("wt", 6), rep("ko", 6)),
+) %>% 
+  dplyr::mutate(treatment = factor(treatment, 
+                                    levels = c("control", "treatment")),
+                genotype = factor(genotype,
+                                  levels = c("wt", "ko")))
+pheno_three <- pheno_three %>% 
+                  tidyr::unite("combined", treatment:genotype, remove = FALSE) %>% 
+                  dplyr::mutate(combined = factor(combined,
+                                                  levels = c("control_wt", "treatment_wt", "control_ko", "treatment_ko"))) %>% 
+                  dplyr::relocate(combined, .after = last_col())
+
+rownames(pheno_three) <- colnames(matrix_three)
+rm(matrix_a, matrix_b, matrix_three_rownames)
+```
+
+## Differential Expression Analysis - control vs. treatment
+```{r}
+# plot expression
+# for gene whose expression DOESN'T change
+matrix_one %>% 
+  tibble::as_tibble(rownames = "gene_name") %>% 
+  dplyr::filter(gene_name == "Gene_h") %>% 
+  tidyr::pivot_longer(cols = !gene_name,
+                      names_to = "mouse",
+                      values_to = "expression") %>% 
+  dplyr::mutate(group = if_else(mouse %in% c("mouse_1", "mouse_2", "mouse_3"),
+                                "control", "treatment")) %>% 
+  ggplot(aes(group, expression)) +
+  geom_boxplot() +
+  theme_bw() +
+  coord_fixed(ylim = c(0, 2.25))
+
+# for gene whose expression DOES change
+matrix_one %>% 
+  tibble::as_tibble(rownames = "gene_name") %>% 
+  dplyr::filter(gene_name == "Gene_a") %>% 
+  tidyr::pivot_longer(cols = !gene_name,
+                      names_to = "mouse",
+                      values_to = "expression") %>% 
+  dplyr::mutate(group = if_else(mouse %in% c("mouse_1", "mouse_2", "mouse_3"),
+                                "control", "treatment")) %>% 
+  ggplot(aes(group, expression)) +
+  geom_boxplot() +
+  theme_bw() +
+  coord_fixed(ylim = c(0, 2.25))
+
+# means-reference model
+design_one_a <- model.matrix(~treatment, data = pheno_one) 
+design_one_a
+
+colnames(design_one_a) <- c("mean_control", "trt_v_control")
+design_one_a
+
+fit_one_a <- limma::lmFit(matrix_one, design_one_a)
+efit_one_a <- limma::eBayes(fit_one_a)
+limma::topTable(efit_one_a, coef = 2) # can also give names of desired coefficients
+
+# means model
+design_one_b <- model.matrix(~0 + treatment, data = pheno_one) 
+design_one_b
+
+colnames(design_one_b) <- c("mean_control", "mean_treatment")
+design_one_b
+
+fit_one_b <- limma::lmFit(matrix_one, design_one_b)
+efit_one_b <- limma::eBayes(fit_one_b)
+limma::topTable(efit_one_b, coef = 2)
+
+contrast_one <- limma::makeContrasts(
+            delta = mean_treatment - mean_control,
+            levels = design_one_b
+)
+contrast_one
+
+fit_one_b <- limma::lmFit(matrix_one, design_one_b)
+contrast_one_fit <- limma::contrasts.fit(fit_one_b, contrast_one)
+contrast_efit_one_b <- limma::eBayes(contrast_one_fit)
+limma::topTable(contrast_efit_one_b, coef = 1)
+```
+
+## Differential Expression Analysis - control vs. treatment1 vs. treatment2
+```{r}
+# plot expression
+# for gene whose expression is affected by trt1
+matrix_two %>% 
+  tibble::as_tibble(rownames = "gene_name") %>% 
+  dplyr::filter(gene_name == "Gene_a") %>% 
+  tidyr::pivot_longer(cols = !gene_name,
+                      names_to = "mouse",
+                      values_to = "expression") %>% 
+  dplyr::mutate(group = case_when(
+                        mouse %in% c("mouse_1", "mouse_2", "mouse_3") ~ "control",
+                        mouse %in% c("mouse_4", "mouse_5", "mouse_6") ~ "trt1",
+                        TRUE ~ "trt2")) %>% 
+  ggplot(aes(group, expression)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(title = "Gene A") +
+  coord_fixed(ylim = c(0, 2.25))
+# for gene whose expression is affected by trt2
+matrix_two %>% 
+  tibble::as_tibble(rownames = "gene_name") %>% 
+  dplyr::filter(gene_name == "Gene_c") %>% 
+  tidyr::pivot_longer(cols = !gene_name,
+                      names_to = "mouse",
+                      values_to = "expression") %>% 
+  dplyr::mutate(group = case_when(
+                        mouse %in% c("mouse_1", "mouse_2", "mouse_3") ~ "control",
+                        mouse %in% c("mouse_4", "mouse_5", "mouse_6") ~ "trt1",
+                        TRUE ~ "trt2")) %>% 
+  ggplot(aes(group, expression)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(title = "Gene C") +
+  coord_fixed(ylim = c(0, 2.25))
+
+# differential expression analysis
+# using a means-reference model
+design_two <- model.matrix(~treatment, data = pheno_two) 
+design_two
+
+colnames(design_two) <- c("mean_control", "trt1_v_control", "trt2_v_control")
+design_two
+
+fit_two <- limma::lmFit(matrix_two, design_two)
+efit_two <- limma::eBayes(fit_two)
+limma::topTable(efit_two, coef = "trt1_v_control")
+limma::topTable(efit_two, coef = "trt2_v_control")
+
+results_two <- decideTests(efit_two)
+summary(results_two)
+```
+
+## Differential Expression Analysis - treatment and genotype
+```{r}
+# plot expression
+# for gene whose expression is NOT affected by treatment
+matrix_three %>% 
+  tibble::as_tibble(rownames = "gene_name") %>% 
+  dplyr::filter(gene_name == "Gene_c") %>% 
+  tidyr::pivot_longer(cols = !gene_name,
+                      names_to = "mouse",
+                      values_to = "expression") %>% 
+  dplyr::mutate(treatment = case_when(
+                        mouse %in% c("mouse_1", "mouse_2", "mouse_3", "mouse_7", "mouse_8", "mouse_9") ~ "control",
+                        mouse %in% c("mouse_4", "mouse_5", "mouse_6", "mouse_10", "mouse_11", "mouse_12") ~ "treatment"),
+                genotype = case_when(
+                        mouse %in% c("mouse_1", "mouse_2", "mouse_3", "mouse_4", "mouse_5", "mouse_6") ~ "wt",
+                        mouse %in% c("mouse_7", "mouse_8", "mouse_9", "mouse_10", "mouse_11", "mouse_12") ~ "ko")) %>% 
+  ggplot(aes(genotype, expression, col = treatment)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(title = "Gene C") +
+  coord_fixed(ylim = c(0, 3.25))
+
+# for gene whose expression is affected by treatment
+# gene A
+matrix_three %>% 
+  tibble::as_tibble(rownames = "gene_name") %>% 
+  dplyr::filter(gene_name == "Gene_a") %>% 
+  tidyr::pivot_longer(cols = !gene_name,
+                      names_to = "mouse",
+                      values_to = "expression") %>% 
+  dplyr::mutate(treatment = case_when(
+                        mouse %in% c("mouse_1", "mouse_2", "mouse_3", "mouse_7", "mouse_8", "mouse_9") ~ "control",
+                        mouse %in% c("mouse_4", "mouse_5", "mouse_6", "mouse_10", "mouse_11", "mouse_12") ~ "treatment"),
+                genotype = case_when(
+                        mouse %in% c("mouse_1", "mouse_2", "mouse_3", "mouse_4", "mouse_5", "mouse_6") ~ "wt",
+                        mouse %in% c("mouse_7", "mouse_8", "mouse_9", "mouse_10", "mouse_11", "mouse_12") ~ "ko")) %>% 
+  ggplot(aes(genotype, expression, col = treatment)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(title = "Gene A") +
+  coord_fixed(ylim = c(0, 3.25))
+
+# gene B
+matrix_three %>% 
+  tibble::as_tibble(rownames = "gene_name") %>% 
+  dplyr::filter(gene_name == "Gene_b") %>% 
+  tidyr::pivot_longer(cols = !gene_name,
+                      names_to = "mouse",
+                      values_to = "expression") %>% 
+  dplyr::mutate(treatment = case_when(
+                        mouse %in% c("mouse_1", "mouse_2", "mouse_3", "mouse_7", "mouse_8", "mouse_9") ~ "control",
+                        mouse %in% c("mouse_4", "mouse_5", "mouse_6", "mouse_10", "mouse_11", "mouse_12") ~ "treatment"),
+                genotype = case_when(
+                        mouse %in% c("mouse_1", "mouse_2", "mouse_3", "mouse_4", "mouse_5", "mouse_6") ~ "wt",
+                        mouse %in% c("mouse_7", "mouse_8", "mouse_9", "mouse_10", "mouse_11", "mouse_12") ~ "ko")) %>% 
+  ggplot(aes(genotype, expression, col = treatment)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(title = "Gene B") +
+  coord_fixed(ylim = c(0, 3.25))
+
+# differential expression analysis
+# Refer to section 9.5 of limma guide
+design_three <- model.matrix(~0 + combined, data = pheno_three)
+design_three
+
+colnames(design_three) <- c("control_wt", "treatment_wt", "control_ko", "treatment_ko")
+
+fit_three <- limma::lmFit(matrix_three, design_three)
+contrast_three <- limma::makeContrasts(
+            trt_vs_con_wt = treatment_wt - control_wt,
+            trt_vs_con_ko = treatment_ko - control_ko,
+            diff = (treatment_ko - control_ko) - (treatment_wt - control_wt),
+            levels = design_three
+)
+contrast_three
+
+contrast_three_fit <- limma::contrasts.fit(fit_three, contrast_three)
+efit_three <- limma::eBayes(contrast_three_fit)
+topTable(efit_three, coef = "trt_vs_con_wt")
+```
+
