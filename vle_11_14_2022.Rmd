@@ -169,6 +169,7 @@ matrix_one %>%
   ggplot(aes(group, expression)) +
   geom_boxplot() +
   theme_bw() +
+  labs(title = "Gene H") +
   coord_fixed(ylim = c(0, 2.25))
 
 # for gene whose expression DOES change
@@ -183,9 +184,10 @@ matrix_one %>%
   ggplot(aes(group, expression)) +
   geom_boxplot() +
   theme_bw() +
+  labs(title = "Gene A") +
   coord_fixed(ylim = c(0, 2.25))
 
-# means-reference model
+# mean-reference model
 design_one_a <- model.matrix(~treatment, data = pheno_one) 
 design_one_a
 
@@ -256,7 +258,7 @@ matrix_two %>%
   coord_fixed(ylim = c(0, 2.25))
 
 # differential expression analysis
-# using a means-reference model
+# using a mean-reference model
 design_two <- model.matrix(~treatment, data = pheno_two) 
 design_two
 
