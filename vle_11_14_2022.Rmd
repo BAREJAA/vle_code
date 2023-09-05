@@ -188,6 +188,7 @@ matrix_one %>%
   coord_fixed(ylim = c(0, 2.25))
 
 # mean-reference model
+# go to slide 8
 design_one_a <- model.matrix(~treatment, data = pheno_one) 
 design_one_a
 
@@ -196,9 +197,10 @@ design_one_a
 
 fit_one_a <- limma::lmFit(matrix_one, design_one_a)
 efit_one_a <- limma::eBayes(fit_one_a)
-limma::topTable(efit_one_a, coef = 2) # can also give names of desired coefficients
+limma::topTable(efit_one_a, coef = "trt_v_control") # can also give names of desired coefficients
 
 # means model
+# go to slide 9
 design_one_b <- model.matrix(~0 + treatment, data = pheno_one) 
 design_one_b
 
@@ -207,8 +209,9 @@ design_one_b
 
 fit_one_b <- limma::lmFit(matrix_one, design_one_b)
 efit_one_b <- limma::eBayes(fit_one_b)
-limma::topTable(efit_one_b, coef = 2)
+limma::topTable(efit_one_b, coef = "mean_treatment")
 
+# go to slide 10
 contrast_one <- limma::makeContrasts(
             delta = mean_treatment - mean_control,
             levels = design_one_b
@@ -353,6 +356,6 @@ contrast_three
 
 contrast_three_fit <- limma::contrasts.fit(fit_three, contrast_three)
 efit_three <- limma::eBayes(contrast_three_fit)
-topTable(efit_three, coef = "trt_vs_con_wt")
+limma::topTable(efit_three, coef = "diff")
 ```
 
