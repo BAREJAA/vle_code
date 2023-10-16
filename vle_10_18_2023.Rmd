@@ -1,0 +1,145 @@
+---
+title: "Making Biological Music with Bioconductor"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# install.packages("tidyverse")
+library(tidyverse)
+
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+
+# BiocManager::install("SummarizedExperiment")
+# BiocManager::install("airway")
+# BiocManager::install("ALL")
+# BiocManager::install("limma")
+# BiocManager::install("biomaRt")
+
+library(SummarizedExperiment)
+library(airway)
+library(ALL)
+library(limma)
+library(biomaRt)
+```
+
+## Guides
+
+“Orchestrating high-throughput genomic analysis with Bioconductor” - https://www.nature.com/articles/nmeth.3252
+
+"SummarizedExperiment for Coordinating Experimental Assays, Samples, and Regions of Interest" - 
+https://bioconductor.org/packages/devel/bioc/vignettes/SummarizedExperiment/inst/doc/SummarizedExperiment.html
+
+## SummarizedExperiment
+
+```{r}
+data(airway, package="airway")
+se <- airway
+se
+
+# Accessing
+
+# obtain count data
+
+?assay
+
+# or
+
+
+# how many rows and columns do we have?
+
+
+# View information related to genes (if any)
+
+
+# View information related to samples
+
+
+# how many treatment groups do we have
+
+
+# View metadata
+
+
+# Subsetting
+
+# only view first 5 samples
+
+
+# only view first 10 genes 
+
+
+# view first 5 samples and first 10 genes
+
+
+# save subset
+
+
+# view count data
+
+
+# view sample information
+
+
+# subset for only those samples treated with dexamethasone
+
+
+# notice how the various parts of this object are connected
+
+# modify se object
+# add today's date as a new column
+
+# take a look at se
+
+# take a look at sample information
+
+# remove this new column
+
+# compute mean gene counts and add this information to se
+
+# use this information to filter out genes that aren't detected in any sample
+
+# log transform the data and create a new assay
+
+# show this assay
+
+```
+
+## Differential expression analysis example
+
+```{r}
+# load ALL data
+?ALL
+
+
+# Take a look at sample information
+
+
+# Only keep B and T cells (refer to column "BT")
+
+
+# Perform differential expression analysis compared B and T groups
+
+# get gene symbols
+```
+
+## Next steps
+
+QFeatures for quantitative mass spectrometry data - 
+https://bioconductor.org/packages/release/bioc/vignettes/QFeatures/inst/doc/Visualization.html
+
+"Exploring QFeatures" (video) - https://www.youtube.com/live/i8gMocvS1KE?si=QRQDvMSLjssen5XR
+
+DESeqDataSet for RNAseq analysis - 
+https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+
+"How to Perform RNA-seq Analysis" (video) - https://www.youtube.com/live/ZUnX_jmffRU?si=FnD-1v2gTPFL_xX6
+
+MultiAssayExperiment for multi-omics experiments -
+https://bioconductor.org/packages/release/bioc/vignettes/MultiAssayExperiment/inst/doc/MultiAssayExperiment.html#creating-a-multiassayexperiment-object-a-rich-example
+
+
+
+
