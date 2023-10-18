@@ -36,6 +36,8 @@ https://bioconductor.org/packages/devel/bioc/vignettes/SummarizedExperiment/inst
 
 ```{r}
 data(airway, package="airway")
+?airway
+
 se <- airway
 se
 
@@ -45,70 +47,79 @@ se
 
 ?assay
 
+assay(se, "counts")
 # or
-
+assays(se)$counts
 
 # how many rows and columns do we have?
-
+dim(se)
 
 # View information related to genes (if any)
-
+rowData(se)
 
 # View information related to samples
-
+colData(se)
 
 # how many treatment groups do we have
-
+colData(se)$dex
+se$dex
 
 # View metadata
-
-# pause for questions [DELETE ME]
+metadata(se)
 
 # Subsetting
 
 # only view first 5 samples
-
+se[ , 1:5] %>% assay
+assay(se[ , 1:5])
 
 # only view first 10 genes 
-
+se[1:10, ]
 
 # view first 5 samples and first 10 genes
-
+se[1:10, 1:5]
 
 # save subset
-
+se_subset <- se[1:10, 1:5]
 
 # view count data
-
+assay(se_subset)
 
 # view sample information
-
+colData(se_subset)
 
 # subset for only those samples treated with dexamethasone
+se[ , se$dex == "trt"] %>% colData
 
 # notice how the various parts of this object are connected
 
-# pause for questions [DELETE ME]
-
 # modify se object
 # add today's date as a new column
-
+colData(se)$date <- "10/18/2023"
 
 # take a look at se
+se
+
 
 # take a look at sample information
-
+colData(se)
 # remove this new column
+colData(se)$date <- NULL
+colData(se)
 
 # compute mean gene counts and add this information to se
+rowData(se)$mean_counts <- rowMeans(assay(se, "counts"))
+rowData(se)
 
 # use this information to filter out genes that aren't detected in any sample
+se[rowData(se)$mean_counts > 0, ]
 
 # log transform the data and create a new assay
+assays(se)$log_counts <- log2(assay(se, "counts"))
 
 # show this assay
-
-# pause for questions [DELETE ME]
+se
+assay(se, "log_counts")
 ```
 
 ## Differential expression analysis example
@@ -116,21 +127,46 @@ se
 ```{r}
 # load ALL data
 ?ALL
+data(ALL)
+
+ALL
+
+ALL_se <- makeSummarizedExperimentFromExpressionSet(ALL)
+ALL_se
 
 # Take a look at sample information
-
+colData(ALL_se)
 # Only keep B and T cells (refer to column "BT")
+ALL_bt <- ALL_se[ , ALL_se$BT %in% c("B", "T")]
+colData(ALL_bt)
 
+# Perform differential expression analysis comparing B and T groups
+ALL_lm <- assay(ALL_bt, 1)
+group <- factor(ALL_bt$BT,
+                levels = c("B", "T"))
+design <- model.matrix(~group)
+colnames(design) <- c("mean_B", "T_vs_B")
 
-# Perform differential expression analysis compared B and T groups
+fit <- lmFit(ALL_lm, design)
+efit <- eBayes(fit)
 
+ALL_lm_results <- topTable(efit, number = 5, coef = "T_vs_B")
 
-# pause for questions [DELETE ME]
 
 # get gene symbols
+mart <- useMart("ENSEMBL_MART_ENSEMBL")
+mart <- useDataset("hsapiens_gene_ensembl" , mart)
+affy_to_gene <- getBM(
+  mart = mart,
+  filter = "affy_hg_u95av2",
+  attributes = c("affy_hg_u95av2", "external_gene_name"),
+  values = rownames(ALL_lm_results)
+)
 
+ALL_lm_results %>% 
+  tibble::rownames_to_column("affy_hg_u95av2") %>% 
+  dplyr::inner_join(affy_to_gene, by = "affy_hg_u95av2")
 
-# pause for questions [DELETE ME]
 ```
 
 ## Next steps
